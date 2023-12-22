@@ -2,39 +2,46 @@
 
 # HBase-specific script to commit a patch to Apache branches
 
-# branch mapping to as the cherry-pick target
-declare -A cp_branches
-cp_branches[master]="master";
-cp_branches[branch-1]="master";
-cp_branches[branch-1.3]="branch-1";
-cp_branches[branch-1.2]="branch-1.3";
-cp_branches[branch-1.1]="branch-1.2";
-cp_branches[branch-1.0]="branch-1.1";
-cp_branches[0.98]="branch-1.0";
 
 commit=true
 commit_branch="master"
 cp_continue=false
+git_apply=false
 
-if [ "$1" == "--no-commit" ]; then
+# branch mapping to as the cherry-pick target. Supports older bash syntaxes without arrays 
+get_cp_branch() {
+  if [ "$1" == "master" ]; then echo "master"
+  elif [ "$1" == "branch-1" ]; then echo "master"
+  elif [ "$1" == "branch-1.3" ]; then echo "branch-1"
+  elif [ "$1" == "branch-1.2" ]; then echo "branch-1.3"
+  elif [ "$1" == "branch-1.1" ]; then echo "branch-1.2"
+  elif [ "$1" == "branch-1.0" ]; then echo "branch-1.1"
+  elif [ "$1" == "0.98" ]; then echo "branch-1.1"
+  fi
+}
+
+if [ "$1" == "--rebase" ]; then
   commit=false
   shift
 elif [ "$1" == "--continue" ]; then
   cp_continue=true
   shift
-elif [ "$1" == "--commit_branch" ]; then
+elif [ "$1" == "--commit-branch" ]; then
   shift
   commit_branch=$1
   shift
-elif [ $# -lt 3 ]; then
+elif [ "$1" == "--apply" ]; then
+  git_apply=true
+  shift
+elif [ $# -lt 2 ]; then
   # if no args specified, show usage
-  echo "Usage: commit.sh [--continue] [--commit_branch <branch>] patch_file branches commit_msg <test>"
-  echo "       commit.sh --no-commit branches"
+  echo "Usage: commit.sh [--continue] [--commit-branch <branch>] [--apply] branches patch_file <commit_msg> <test>"
+  echo "       commit.sh --rebase branches"
   exit
 fi
 
 # silly shortcut. I do not want to write bash logic, so this is hard coded
-branches=$2
+branches=$1
 if [ "$branches" == "0.98+" ]; then
   branches="master,branch-1,branch-1.3,branch-1.2,branch-1.1,branch-1.0,0.98"
 elif [ "$branches" == "branch-1.0+" ]; then
@@ -49,7 +56,7 @@ elif [ "$branches" == "branch-1+" ]; then
   branches="master,branch-1"
 fi
 
-patch=$1
+patch=$2
 branches=("${branches//,/ }") # parse $2 into an array
 commit_msg=$3
 test_cmd=""
@@ -86,18 +93,25 @@ apply_patch() {
   run_or_die "patch -$p" "$patch"
 }
 
+git_apply_patch() {
+  patch=$1
+  git am --signoff --whitespace=fix $patch
+}
 
-build_and_test() {
+find_tests_from_patch() {
   if [ "$test_cmd" == "" ]; then
     # find tests that the patch touches, and run them
-    TESTS_IN_PATCH=`cat $patch | grep -E -o "(Test[a-zA-Z0-9]+)\.java"  | sort -u | cut -d "." -f 1` 
-    test_cmd=`echo $TESTS_IN_PATCH | sed -e 's/\s/,/g'`
+    TESTS_IN_PATCH=`cat $patch | grep -E -o "(Test[a-zA-Z0-9]+)\.java"  | sort -u | cut -d "." -f 1 | sed -e 's/ /,/g'` 
+    #test_cmd=`echo $TESTS_IN_PATCH | sed -e 's/[\s]/,/g'`
+    test_cmd=$TESTS_IN_PATCH
   fi
+}
 
+build_and_test() {
   if [ "$test_cmd" != "" ]; then
-    run_or_die "mvn clean install -Dtest=$test_cmd -DskipIntegrationTests -DskipSparkTests"
+    run_or_die "mvn clean test -Dtest=$test_cmd -DskipIntegrationTests -DskipSparkTests"
   else
-    run_or_die "mvn clean install -DskipTests -DskipIntegrationTests -DskipSparkTests"
+    run_or_die "mvn clean test-compile -DskipTests -DskipIntegrationTests -DskipSparkTests"
   fi
 }
 
@@ -114,6 +128,11 @@ print_latest_commits() {
 	echo 
   done
 }
+
+# figure out if there are tests modified from the patch
+if [ "$patch" != "" ]; then
+  find_tests_from_patch
+fi
 
 echo
 echo "#####################################################"
@@ -141,18 +160,23 @@ for branch in $branches; do
 
   if [ "$commit" == "true" ]; then 
     if [ $branch == $commit_branch ]; then
-      apply_patch "$patch"
-      build_and_test
-      run_or_die "git add ."
-      echo "$commit_msg" >/tmp/commit_msg
-      run_or_die "git commit -F /tmp/commit_msg"
+      if [ "$git_apply" == "true" ]; then
+        git_apply_patch "$patch"
+        build_and_test
+      else 
+        apply_patch "$patch"
+        build_and_test
+        run_or_die "git add ."
+        echo "$commit_msg" >/tmp/commit_msg
+        run_or_die "git commit -F /tmp/commit_msg"
+      fi
     else
       if [ "$cp_continue" == "true" ]; then 
         run_or_die "git add ."
         run_or_die "git cherry-pick --continue"
         cp_continue=false
       else
-        run_or_die "git cherry-pick  ${cp_branches[$branch]}"
+        run_or_die "git cherry-pick  $(get_cp_branch $branch)"
       fi
       build_and_test
     fi

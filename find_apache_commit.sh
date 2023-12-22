@@ -13,8 +13,8 @@ echo "****************************************************"
 echo "Greping commit ($COMMIT_TEXT) for Apache branches   ";
 echo "****************************************************"
 
-BRANCHES="master branch-1.2 branch-1.1 branch-1.0 0.98"
-VERSIONS="1.2 1.1 1.0 0.98"
+BRANCHES="master branch-1.3 branch-1.2 branch-1.1 branch-1.0 0.98"
+VERSIONS="1.3 1.2 1.1 1.0 0.98"
 
 git fetch -t 
 

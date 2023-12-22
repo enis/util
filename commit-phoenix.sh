@@ -11,7 +11,7 @@ cp_branches[branch-1.1]="branch-1.2";
 cp_branches[branch-1.0]="branch-1.1";
 cp_branches[0.98]="branch-1.0";
 
-hbase_branches="-HBase-1.1,-HBase-1.0,-HBase-0.98"
+hbase_branches="-HBase-1.2,-HBase-1.1,-HBase-1.0,-HBase-0.98"
 
 commit=true
 cp_continue=false
@@ -22,13 +22,13 @@ elif [ "$1" == "--continue" ]; then
   shift
 elif [ $# -lt 3 ]; then
   # if no args specified, show usage
-  echo "Usage: commit.sh [--continue] patch_file branches commit_msg <test>"
+  echo "Usage: commit.sh [--continue] branches patch_file commit_msg <test>"
   echo "       commit.sh --no-commit branches"
   exit
 fi
 
 # silly shortcut. I do not want to write bash logic, so this is hard coded
-branches=$2
+branches=$1
 if [ "$branches" == "4.4+" ]; then
   branches="4.x,4.6,4.5,4.4"
 elif [ "$branches" == "4.5+" ]; then
@@ -39,7 +39,7 @@ elif [ "$branches" == "4.x+" ]; then
   branches="4.x"
 fi
 
-patch=$1
+patch=$2
 branches=("${branches//,/ }") # parse $2 into an array
 hbase_branches=("${hbase_branches//,/ }") # declare -a does not work
 commit_msg=$3
@@ -50,7 +50,7 @@ echo $hbase_branches
 expanded_branches=""
 for branch in $branches; do
   for hbase_branch in $hbase_branches; do
-    if [ "$branch" == "4.x" -a $hbase_branch == "-HBase-1.1" ]; then
+    if [ "$branch" == "4.x" -a $hbase_branch == "-HBase-1.2" ]; then
 	    expanded_branches="$expanded_branches,master"
   	else
 	    expanded_branches="$expanded_branches,$branch$hbase_branch"
